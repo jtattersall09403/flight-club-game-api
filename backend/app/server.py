@@ -26,9 +26,11 @@ from typing import Any, Literal
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
+import httpx
 
 from .data import load_dataset
 from .questions import VALID_MODES, Leg, QuestionGenerator
+from . import leaderboard as lb
 
 # ----------------------------------------------------------------- bootstrap
 
@@ -248,3 +250,47 @@ def _coords(iata: str) -> tuple[float | None, float | None]:
     if not n:
         return (None, None)
     return (n.get("lat"), n.get("lon"))
+
+
+# ----------------------------------------------------------- leaderboard
+
+
+class ScoreSubmit(BaseModel):
+    name: str
+    score: int = Field(ge=0)
+    mode: Mode = "normal"
+
+
+@app.get("/api/leaderboard")
+def leaderboard_top(mode: Mode = "normal", limit: int = 20) -> dict[str, Any]:
+    if not lb.is_configured():
+        return {"configured": False, "entries": []}
+    limit = max(1, min(int(limit), 50))
+    try:
+        entries = lb.top(mode, limit=limit)
+    except (lb.LeaderboardError, httpx.HTTPError) as e:
+        raise HTTPException(status_code=502, detail=str(e)) from e
+    return {"configured": True, "entries": entries, "window_days": lb.WINDOW_DAYS}
+
+
+@app.get("/api/leaderboard/names")
+def leaderboard_names(q: str = "") -> dict[str, Any]:
+    if not lb.is_configured():
+        return {"configured": False, "names": []}
+    try:
+        names = lb.names_matching(q, limit=8)
+    except (lb.LeaderboardError, httpx.HTTPError) as e:
+        raise HTTPException(status_code=502, detail=str(e)) from e
+    return {"configured": True, "names": names}
+
+
+@app.post("/api/leaderboard")
+def leaderboard_submit(req: ScoreSubmit) -> dict[str, Any]:
+    if not lb.is_configured():
+        raise HTTPException(status_code=503, detail="leaderboard not configured")
+    try:
+        return lb.submit(req.name, int(req.score), req.mode)
+    except lb.LeaderboardError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+    except httpx.HTTPError as e:
+        raise HTTPException(status_code=502, detail=str(e)) from e
