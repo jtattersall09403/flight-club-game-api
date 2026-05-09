@@ -1,0 +1,13 @@
+services:
+  - type: web
+    name: flight-club-api
+    runtime: python
+    rootDir: backend
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn app.server:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.9
+      - key: CORS_ALLOW_ORIGINS
+        sync: false  # set in dashboard to your Netlify URL
