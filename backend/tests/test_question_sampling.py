@@ -22,8 +22,8 @@ class QuestionSamplingTests(unittest.TestCase):
         ]
         airlines = [{"iata": "AL1", "name": "Airline 1"}, {"iata": "AL2", "name": "Airline 2"}]
         groups = [
-            {"id": "g_fail", "name": "Fail", "obscurity": 2, "airlines": ["AL2"], "anchor": None},
-            {"id": "g_pass", "name": "Pass", "obscurity": 2, "airlines": ["AL1"], "anchor": None},
+            {"id": "g_fail", "name": "Fail", "obscurity": 1, "airlines": ["AL2"], "anchor": None},
+            {"id": "g_pass", "name": "Pass", "obscurity": 1, "airlines": ["AL1"], "anchor": None},
         ]
         return Dataset(nodes=nodes, edges=edges, airlines=airlines, groups=groups)
 
@@ -31,7 +31,7 @@ class QuestionSamplingTests(unittest.TestCase):
         gen = QuestionGenerator(self._dataset_for_sampling())
         gen._sample_airport_pair = lambda pool, rng: ("AAA", "BBB")  # type: ignore[assignment]
         q = gen.sample(level=3, rng=random.Random(7))
-        self.assertEqual(q.obscurity, 2)
+        self.assertEqual(q.obscurity, 1)
         self.assertEqual(q.conn_tier, 3)
         self.assertEqual(gen._airport_meta[q.a]["tier"], 3)
         self.assertEqual(gen._airport_meta[q.b]["tier"], 3)
