@@ -13,17 +13,17 @@ computed from global degree thresholds in the data pipeline:
   T9: 10..19
   T10: <10
 
-Levels map linearly to connectivity tier, so level N targets tier N.
-Obscurity bands are constrained by level:
-  L1-3: O1
-  L4: O2
-  L5: O3
-  L6: O4-O5
-  L7: O6-O7
-  L8: O8
-  L9: O9
-  L10: O10
-
+Allowed combinations per level:
+  L1:  (O1, C1)
+  L2:  (O1, C2)
+  L3:  (O1, C3)
+  L4:  (O1, C4) or (O2-3, C2)
+  L5:  (O1, C5) or (O2-3, C3)
+  L6:  (O1, C6) or (O4-5, C4)
+  L7:  (O2-3, C7) or (O5-6, C5)
+  L8:  (O2-3, C8) or (O7-8, C6)
+  L9:  (O4-5, C9) or (O8-9, C7)
+  L10: (O6-10, C10)
 """
 from __future__ import annotations
 
@@ -37,28 +37,21 @@ def difficulty_level(obscurity: int, conn_tier: int) -> int:
     return max(LEVEL_MIN, min(LEVEL_MAX, conn_tier))
 
 
-
-
-def _allowed_obscurities_for_level(level: int) -> tuple[int, ...]:
-    if level <= 3:
-        return (1,)
-    if level == 4:
-        return (2,)
-    if level == 5:
-        return (3,)
-    if level == 6:
-        return (4, 5)
-    if level == 7:
-        return (6, 7)
-    if level == 8:
-        return (8,)
-    if level == 9:
-        return (9,)
-    return (10,)
-
 def feasible_combos(level: int) -> list[tuple[int, int]]:
     """Allowed (obscurity, conn_tier) combinations for a requested level."""
     if level < LEVEL_MIN or level > LEVEL_MAX:
         return []
-    conn_tier = level
-    return [(obscurity, conn_tier) for obscurity in _allowed_obscurities_for_level(level)]
+
+    combos_by_level: dict[int, list[tuple[int, int]]] = {
+        1: [(1, 1)],
+        2: [(1, 2)],
+        3: [(1, 3)],
+        4: [(1, 4), (2, 2), (3, 2)],
+        5: [(1, 5), (2, 3), (3, 3)],
+        6: [(1, 6), (4, 4), (5, 4)],
+        7: [(2, 7), (3, 7), (5, 5), (6, 5)],
+        8: [(2, 8), (3, 8), (7, 6), (8, 6)],
+        9: [(4, 9), (5, 9), (8, 7), (9, 7)],
+        10: [(6, 10), (7, 10), (8, 10), (9, 10), (10, 10)],
+    }
+    return combos_by_level[level]
