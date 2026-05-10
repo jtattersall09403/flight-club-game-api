@@ -25,7 +25,7 @@ from typing import Any, Literal, TypeVar
 
 from . import graph
 from .data import Dataset
-from .difficulty import LEVEL_MAX, LEVEL_MIN, difficulty_level, feasible_combos
+from .difficulty import LEVEL_MAX, LEVEL_MIN, combo_branches, difficulty_level, feasible_combos
 
 Mode = Literal["normal", "hard"]
 VALID_MODES: tuple[Mode, ...] = ("normal", "hard")
@@ -213,9 +213,14 @@ class QuestionGenerator:
         if not combos:
             raise ValueError(f"no feasible (obscurity, tier) combos for level {level}")
 
-        # Try combos in random order.
+        branches = combo_branches(level)
+        combo_order: list[tuple[int, int]] = []
+        for branch in _shuffled(branches, rng):
+            combo_order.extend(_shuffled(branch, rng))
+
+        # Try combos in branch-randomized order.
         attempts = 0
-        for combo in _shuffled(combos, rng):
+        for combo in combo_order:
             obscurity, target_tier = combo
             group_ids = self._groups_by_obscurity.get(obscurity, [])
             if not group_ids:
