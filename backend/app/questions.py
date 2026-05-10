@@ -21,7 +21,7 @@ from __future__ import annotations
 import functools
 import random
 from dataclasses import dataclass
-from typing import Any, Literal
+from typing import Any, Literal, TypeVar
 
 from . import graph
 from .data import Dataset
@@ -235,6 +235,8 @@ class QuestionGenerator:
                         continue
                     if not self._are_connected(adj, a_iata, b_iata):
                         continue
+                    # Optional anti-trivial filter: only applied *after*
+                    # full reachability is confirmed for the sampled pair.
                     if self._is_trivial_via_anchor_hub(gid, a_iata, b_iata):
                         continue
                     return self._materialize(gid, a_iata, b_iata, mode)
@@ -509,7 +511,10 @@ class QuestionGenerator:
         return self._materialize(group_id, a, b, mode)
 
 
-def _shuffled(seq: list, rng: random.Random) -> list:
+T = TypeVar("T")
+
+
+def _shuffled(seq: list[T], rng: random.Random) -> list[T]:
     out = list(seq)
     rng.shuffle(out)
     return out
