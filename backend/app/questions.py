@@ -229,6 +229,10 @@ class QuestionGenerator:
                 if pair is None:
                     break
                 a_iata, b_iata = pair
+                # Defensive guard: sampled endpoints must both be from the
+                # selected connection tier for this combo.
+                if not self._pair_matches_tier(a_iata, b_iata, target_tier):
+                    continue
                 for gid in _shuffled(group_ids, rng):
                     adj, _edge_airlines = self._subgraph(gid)
                     if a_iata not in adj or b_iata not in adj:
@@ -264,6 +268,11 @@ class QuestionGenerator:
         if len(pool) < 2:
             return None
         return tuple(rng.sample(pool, 2))  # type: ignore[return-value]
+
+    def _pair_matches_tier(self, a: str, b: str, tier: int) -> bool:
+        a_tier = int(self._airport_meta.get(a, {}).get("tier", -1))
+        b_tier = int(self._airport_meta.get(b, {}).get("tier", -1))
+        return a_tier == tier and b_tier == tier
 
     def _are_connected(self, adj: dict[str, set[str]], a: str, b: str) -> bool:
         return graph.bfs_distance(adj, a, b) is not None
