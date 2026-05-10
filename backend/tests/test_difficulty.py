@@ -1,6 +1,6 @@
 import unittest
 
-from app.difficulty import feasible_combos
+from app.difficulty import combo_branches, feasible_combos
 
 
 class DifficultyRulesTests(unittest.TestCase):
@@ -20,6 +20,10 @@ class DifficultyRulesTests(unittest.TestCase):
 
         for level, expected_pairs in expected.items():
             self.assertEqual(set(feasible_combos(level)), expected_pairs)
+
+    def test_combo_branches_match_expected_structure(self):
+        self.assertEqual(combo_branches(5), [[(1, 5)], [(2, 3), (3, 3)]])
+        self.assertEqual(combo_branches(10), [[(6, 10), (7, 10), (8, 10), (9, 10), (10, 10)]])
 
 
 if __name__ == "__main__":
