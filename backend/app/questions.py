@@ -2,21 +2,19 @@
 
 A request for a level-N question runs roughly:
 
-  1. Look at `feasible_combos(N)` -> list of (obscurity, conn_tier) pairs
-     whose formula produces level N.
+  1. Look at `feasible_combos(N)` -> list of (obscurity, conn_tier) pairs.
   2. Shuffle that list. For each (O, C) combo:
-       a. Pick a random "anchor airport" A whose tier == C (this guarantees
-          max(tier_a, tier_b) >= C; we keep B's tier <= C so the max is
-          exactly C).
+       a. Sample two distinct airports A and B from tier C.
        b. Shuffle groups whose `obscurity == O`.
-       c. For each candidate group, build (or fetch from cache) its subgraph
-          and check whether A is in it. If so, BFS one step to find a
-          neighbour B (or two-step neighbour) with tier <= C and a valid
-          indirect routing back to A. Return the first match.
-  3. If no question found within MAX_ATTEMPTS, raise.
+       c. For each candidate group, build (or fetch) its subgraph and check
+          whether A and B are connected by any number of hops.
+       d. Keep the same pair while trying all groups; only resample the pair
+          after group exhaustion.
+  3. If no valid pair+group is found within MAX_ATTEMPTS_PER_REQUEST pair
+     attempts, raise.
 
-Subgraph builds happen on demand and are LRU-cached, so the second sample for
-the same group is cheap. Building one subgraph is ~5-30ms for our dataset.
+Subgraph builds happen on demand and are LRU-cached, so repeated group checks
+are cheap after first materialization.
 """
 from __future__ import annotations
 
@@ -122,8 +120,8 @@ class QuestionGenerator:
     """Lazy on-demand question generator.
 
     Build cost: O(nodes + groups) (no subgraph materialization).
-    Per-sample cost: typically one subgraph build (~5-30ms) for the chosen
-    group, then O(degree) random pick + O(BFS) verification.
+    Per-sample cost: repeated random airport-pair attempts, where each attempt
+    may scan groups at a target obscurity and run BFS reachability checks.
     """
 
     def __init__(self, dataset: Dataset) -> None:
@@ -132,7 +130,7 @@ class QuestionGenerator:
         self._groups_by_id: dict[str, dict[str, Any]] = {g["id"]: g for g in dataset.groups}
         self._airline_name: dict[str, str] = {a["iata"]: a["name"] for a in dataset.airlines}
 
-        # Index nodes by tier (for fast random pick of "anchor airport").
+        # Index nodes by tier (for random endpoint-pair sampling).
         self._nodes_by_tier: dict[int, list[str]] = {}
         for n in dataset.nodes:
             self._nodes_by_tier.setdefault(int(n["tier"]), []).append(n["iata"])
@@ -222,25 +220,25 @@ class QuestionGenerator:
             group_ids = self._groups_by_obscurity.get(obscurity, [])
             if not group_ids:
                 continue
-            anchor_pool = self._nodes_by_tier.get(target_tier, [])
-            if not anchor_pool:
+            airport_pool = self._nodes_by_tier.get(target_tier, [])
+            if len(airport_pool) < 2:
                 continue
-            for _ in range(40):
+            while attempts < MAX_ATTEMPTS_PER_REQUEST:
                 attempts += 1
-                if attempts > MAX_ATTEMPTS_PER_REQUEST:
+                pair = self._sample_airport_pair(airport_pool, rng)
+                if pair is None:
                     break
-                a_iata = rng.choice(anchor_pool)
-                # Shuffle groups for this combo.
+                a_iata, b_iata = pair
                 for gid in _shuffled(group_ids, rng):
                     adj, _edge_airlines = self._subgraph(gid)
-                    if a_iata not in adj:
+                    if a_iata not in adj or b_iata not in adj:
                         continue
-                    # Pick neighbour or 2-hop neighbour with tier <= target_tier.
-                    b_iata = self._find_partner(adj, a_iata, target_tier, gid, rng)
-                    if b_iata is None:
+                    if not self._are_connected(adj, a_iata, b_iata):
+                        continue
+                    if self._is_trivial_via_anchor_hub(gid, a_iata, b_iata):
                         continue
                     return self._materialize(gid, a_iata, b_iata, mode)
-            if attempts > MAX_ATTEMPTS_PER_REQUEST:
+            if attempts >= MAX_ATTEMPTS_PER_REQUEST:
                 break
         raise RuntimeError(
             f"could not build a level-{level} question within {MAX_ATTEMPTS_PER_REQUEST} attempts"
@@ -256,38 +254,17 @@ class QuestionGenerator:
         rng = rng or random
         return [self.sample(level, mode=mode, rng=rng) for _ in range(n)]
 
-    def _find_partner(
+    def _sample_airport_pair(
         self,
-        adj: dict[str, set[str]],
-        a: str,
-        target_tier: int,
-        group_id: str,
+        pool: list[str],
         rng: random.Random,
-    ) -> str | None:
-        """Pick B in this subgraph with tier <= target_tier, A != B, that
-        is reachable from A and is not a trivial-via-anchor-hub pair."""
-        # Reachable nodes: BFS from A within this group's subgraph.
-        # We don't need full reachability — sample randomly from neighbours and
-        # 2-hop neighbours to keep BFS cheap.
-        candidates = list(adj[a])
-        # Add 2-hop neighbours so we get pairs that need an intermediate.
-        two_hop: set[str] = set()
-        for n in candidates:
-            two_hop.update(adj[n])
-        two_hop -= {a}
-        two_hop -= set(candidates)
-        candidates.extend(two_hop)
-        rng.shuffle(candidates)
-        for b in candidates:
-            if b == a:
-                continue
-            meta = self._airport_meta.get(b)
-            if not meta or int(meta["tier"]) > target_tier:
-                continue
-            if self._is_trivial_via_anchor_hub(group_id, a, b):
-                continue
-            return b
-        return None
+    ) -> tuple[str, str] | None:
+        if len(pool) < 2:
+            return None
+        return tuple(rng.sample(pool, 2))  # type: ignore[return-value]
+
+    def _are_connected(self, adj: dict[str, set[str]], a: str, b: str) -> bool:
+        return graph.bfs_distance(adj, a, b) is not None
 
     # -------------------------------------------------------- answer handling
 
