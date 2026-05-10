@@ -89,6 +89,24 @@ class QuestionSamplingTests(unittest.TestCase):
         one_leg_result = gen.validate_answer(q, one_leg)
         self.assertFalse(one_leg_result.valid)
 
+    def test_level_one_always_uses_tier_one_endpoints(self):
+        nodes = [
+            {"iata": "AAA", "tier": 1, "name": "A", "city": "A", "country": "X"},
+            {"iata": "BBB", "tier": 1, "name": "B", "city": "B", "country": "X"},
+            {"iata": "CCC", "tier": 2, "name": "C", "city": "C", "country": "X"},
+        ]
+        edges = [{"a": "AAA", "b": "BBB", "airlines": ["AL1"]}]
+        airlines = [{"iata": "AL1", "name": "Airline 1"}]
+        groups = [{"id": "g1", "name": "G1", "obscurity": 1, "airlines": ["AL1"], "anchor": None}]
+        gen = QuestionGenerator(Dataset(nodes=nodes, edges=edges, airlines=airlines, groups=groups))
+
+        q = gen.sample(level=1, rng=random.Random(3))
+
+        self.assertEqual(q.level, 1)
+        self.assertEqual(gen._airport_meta[q.a]["tier"], 1)
+        self.assertEqual(gen._airport_meta[q.b]["tier"], 1)
+        self.assertEqual(q.conn_tier, 1)
+
 
 if __name__ == "__main__":
     unittest.main()
