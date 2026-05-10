@@ -30,7 +30,7 @@ class QuestionSamplingTests(unittest.TestCase):
     def test_sample_endpoints_match_target_tier_and_multi_hop_allowed(self):
         gen = QuestionGenerator(self._dataset_for_sampling())
         gen._sample_airport_pair = lambda pool, rng: ("AAA", "BBB")  # type: ignore[assignment]
-        q = gen.sample(level=4, rng=random.Random(7))
+        q = gen.sample(level=3, rng=random.Random(7))
         self.assertEqual(q.obscurity, 2)
         self.assertEqual(q.conn_tier, 3)
         self.assertEqual(gen._airport_meta[q.a]["tier"], 3)
@@ -60,7 +60,7 @@ class QuestionSamplingTests(unittest.TestCase):
         gen._subgraph = capture_subgraph  # type: ignore[assignment]
 
         with patch("app.questions._shuffled", side_effect=lambda xs, _rng: list(xs)):
-            q = gen.sample(level=4, rng=random.Random(2))
+            q = gen.sample(level=3, rng=random.Random(2))
 
         self.assertTrue(sampled_pairs)
         self.assertEqual(len(sampled_pairs), 1)
@@ -70,14 +70,14 @@ class QuestionSamplingTests(unittest.TestCase):
 
     def test_seeded_sampling_is_deterministic(self):
         gen = QuestionGenerator(self._dataset_for_sampling())
-        q1 = gen.sample(level=4, rng=random.Random(99))
-        q2 = gen.sample(level=4, rng=random.Random(99))
+        q1 = gen.sample(level=3, rng=random.Random(99))
+        q2 = gen.sample(level=3, rng=random.Random(99))
         self.assertEqual((q1.group_id, q1.a, q1.b), (q2.group_id, q2.a, q2.b))
 
     def test_validate_example_and_routes_work_for_multi_hop_sample(self):
         gen = QuestionGenerator(self._dataset_for_sampling())
         gen._sample_airport_pair = lambda pool, rng: ("AAA", "BBB")  # type: ignore[assignment]
-        q = gen.sample(level=4, rng=random.Random(5))
+        q = gen.sample(level=3, rng=random.Random(5))
         self.assertGreaterEqual(q.min_stops, 2)
 
         example = gen.example_answer(q, rng=random.Random(11))

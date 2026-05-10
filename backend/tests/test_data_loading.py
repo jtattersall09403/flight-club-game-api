@@ -10,7 +10,7 @@ class DataLoadingTests(unittest.TestCase):
     def _write_static_files(self, root: Path) -> Path:
         processed = root / "data" / "processed"
         processed.mkdir(parents=True)
-        (processed / "nodes.json").write_text('[{"iata":"OLD","tier":5}]')
+        (processed / "nodes.json").write_text('[{"iata":"OLD","tier":10}]')
         (processed / "edges.json").write_text('[{"a":"OLD","b":"ZZZ","airlines":["OL"]}]')
         (processed / "airlines.json").write_text('[{"iata":"BA","name":"British Airways"},{"iata":"VS","name":"Virgin Atlantic"},{"iata":"GX","name":"Group X"}]')
         (processed / "groups.json").write_text('[{"id":"g1","name":"Group 1","obscurity":1,"anchor":null,"airlines":["BA","GX"]}]')
@@ -38,8 +38,8 @@ class DataLoadingTests(unittest.TestCase):
             self.assertEqual(len(ds.edges), 1)
             self.assertEqual(ds.edges[0], {"a": "AAA", "b": "BBB", "airlines": ["BA", "KL"]})
             tiers = {n["iata"]: n["tier"] for n in ds.nodes}
-            self.assertEqual(tiers["AAA"], 5)
-            self.assertEqual(tiers["BBB"], 5)
+            self.assertEqual(tiers["AAA"], 10)
+            self.assertEqual(tiers["BBB"], 10)
 
     def test_malformed_entries_skipped_and_group_airline_preserved(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -67,7 +67,7 @@ class DataLoadingTests(unittest.TestCase):
             processed = self._write_static_files(Path(tmp))
             with patch.dict("os.environ", {"ROUTES_DATA_MODE": "static"}, clear=False):
                 ds = load_dataset(processed)
-            self.assertEqual(ds.nodes, [{"iata": "OLD", "tier": 5}])
+            self.assertEqual(ds.nodes, [{"iata": "OLD", "tier": 10}])
 
     def test_remote_failure_falls_back_cache_then_static(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -90,7 +90,7 @@ class DataLoadingTests(unittest.TestCase):
             with patch.dict("os.environ", env, clear=False):
                 with patch("app.data.fetch_remote_routes", side_effect=RuntimeError("boom")):
                     ds2 = load_dataset(processed)
-            self.assertEqual(ds2.nodes, [{"iata": "OLD", "tier": 5}])
+            self.assertEqual(ds2.nodes, [{"iata": "OLD", "tier": 10}])
 
 
 if __name__ == "__main__":

@@ -30,15 +30,26 @@ class Dataset:
 
 
 def compute_tier(degree: int) -> int:
-    if degree >= 100:
+    """Map airport degree into 10 connectivity tiers (1=most connected)."""
+    if degree >= 150:
         return 1
-    if degree >= 50:
+    if degree >= 120:
         return 2
-    if degree >= 20:
+    if degree >= 100:
         return 3
-    if degree >= 5:
+    if degree >= 80:
         return 4
-    return 5
+    if degree >= 60:
+        return 5
+    if degree >= 45:
+        return 6
+    if degree >= 30:
+        return 7
+    if degree >= 20:
+        return 8
+    if degree >= 10:
+        return 9
+    return 10
 
 
 def _load_json(path: Path) -> Any:
