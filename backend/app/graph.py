@@ -207,12 +207,45 @@ def k_shortest_paths(
     dst: str,
     k: int,
     min_legs: int = 1,
+    rank_by: str = "distance",
 ) -> list[tuple[float, list[str]]]:
-    """Yen's algorithm for K-shortest simple paths by edge weight.
+    """K-shortest simple paths with configurable ranking.
 
-    Filters output to paths with at least `min_legs` legs (so caller can
-    require indirect-only routings) without disrupting Yen's invariants.
+    rank_by="distance": Yen's algorithm for total edge weight.
+    rank_by="stops_distance": ordered by (legs, total_distance).
     """
+    if rank_by not in {"distance", "stops_distance"}:
+        raise ValueError(f"unsupported rank_by: {rank_by!r}")
+
+    if rank_by == "stops_distance":
+        if src not in adj or dst not in adj:
+            return []
+        results: list[tuple[float, list[str]]] = []
+        pq: list[tuple[int, float, int, list[str]]] = [(0, 0.0, 0, [src])]
+        counter = 0
+        pops = 0
+        max_pops = max(1000, k * 500)
+        max_legs = min(len(adj) - 1, max(min_legs + 6, min_legs))
+        while pq and len(results) < k and pops < max_pops:
+            pops += 1
+            legs, dist, _, path = heapq.heappop(pq)
+            node = path[-1]
+            if node == dst and legs >= min_legs:
+                results.append((dist, path))
+                continue
+            if legs >= max_legs:
+                continue
+            for nxt in sorted(adj.get(node, ())):
+                if nxt in path:
+                    continue
+                edge = _canon(node, nxt)
+                w = weights.get(edge)
+                if w is None:
+                    continue
+                counter += 1
+                heapq.heappush(pq, (legs + 1, dist + w, counter, path + [nxt]))
+        return results
+
     first = _dijkstra(adj, weights, src, dst)
     if not first:
         return []

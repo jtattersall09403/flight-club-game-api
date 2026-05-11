@@ -213,7 +213,7 @@ class RoutesRequest(BaseModel):
 
 @app.post("/api/routes")
 def routes(req: RoutesRequest) -> dict[str, Any]:
-    """Top-K shortest indirect routings by great-circle distance flown."""
+    """Top-K indirect routings by fewest stops, then great-circle distance."""
     try:
         q = gen.question_for(req.group_id, req.a, req.b, mode=req.mode)
     except ValueError as e:

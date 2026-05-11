@@ -423,13 +423,19 @@ class QuestionGenerator:
         k: int = 11,
     ) -> list[dict[str, Any]]:
         """Top-K routings between question.a and question.b in this group's
-        subgraph, ranked by total great-circle distance flown. Routes shorter
-        than 2 legs are excluded (game rule: indirect only)."""
+        subgraph, ranked by fewest stops, then total great-circle distance.
+        Routes shorter than 2 legs are excluded (game rule: indirect only)."""
         gid = question.group_id
         adj, edge_airlines = self._subgraph(gid)
         weights = self._edge_weights_km(adj)
         paths = graph.k_shortest_paths(
-            adj, weights, question.a, question.b, k=k, min_legs=2
+            adj,
+            weights,
+            question.a,
+            question.b,
+            k=k,
+            min_legs=2,
+            rank_by="stops_distance",
         )
         out: list[dict[str, Any]] = []
         for cost_km, path in paths:
