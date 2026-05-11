@@ -92,6 +92,16 @@ class DataLoadingTests(unittest.TestCase):
                     ds2 = load_dataset(processed)
             self.assertEqual(ds2.nodes, [{"iata": "OLD", "tier": 10}])
 
+    def test_partner_program_anchor_removed_from_group_airlines(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            processed = self._write_static_files(Path(tmp))
+            (processed / "groups.json").write_text(
+                '[{"id":"p1","name":"Partner","type":"partner_program","obscurity":2,"anchor":"ba","airlines":["BA","VS","vs"]}]'
+            )
+            ds = load_dataset(processed)
+            self.assertEqual(ds.groups[0]["anchor"], "BA")
+            self.assertEqual(ds.groups[0]["airlines"], ["VS"])
+
 
 if __name__ == "__main__":
     unittest.main()
