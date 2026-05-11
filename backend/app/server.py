@@ -228,7 +228,8 @@ def hint(req: HintRequest) -> dict[str, Any]:
         raise HTTPException(status_code=404, detail=f"unknown group: {req.group_id}")
     codes = list(group.get("airlines", []))
     anchor = group.get("anchor")
-    if anchor and anchor not in codes:
+    include_anchor = group.get("type") != "partner_program"
+    if include_anchor and anchor and anchor not in codes:
         codes.insert(0, anchor)
     return {
         "group_id": group["id"],

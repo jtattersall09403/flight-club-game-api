@@ -4,18 +4,14 @@ from __future__ import annotations
 from collections import deque
 from typing import Any
 
-# Edge inclusion rule (confirmed by user):
+# Edge inclusion rule:
 #   An edge belongs to a group's subgraph if at least one of its airlines is in
-#   the group's airline list OR is the group's anchor (for partner programs,
-#   which include the anchor's own flights).
+#   the group's airline list.
 
 
 def group_airline_set(group: dict[str, Any]) -> set[str]:
-    """Airlines whose flights count as in-group, including the anchor."""
-    codes = set(group["airlines"])
-    if group.get("anchor"):
-        codes.add(group["anchor"])
-    return codes
+    """Airlines whose flights count as in-group."""
+    return set(group["airlines"])
 
 
 def _canon(a: str, b: str) -> tuple[str, str]:

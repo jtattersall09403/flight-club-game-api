@@ -107,6 +107,27 @@ class QuestionSamplingTests(unittest.TestCase):
         self.assertEqual(gen._airport_meta[q.b]["tier"], 1)
         self.assertEqual(q.conn_tier, 1)
 
+    def test_partner_anchor_flights_not_used_for_question_generation(self):
+        nodes = [
+            {"iata": "AAA", "tier": 2, "name": "A", "city": "A", "country": "X"},
+            {"iata": "BBB", "tier": 2, "name": "B", "city": "B", "country": "X"},
+        ]
+        edges = [{"a": "AAA", "b": "BBB", "airlines": ["AN"]}]
+        airlines = [{"iata": "AN", "name": "Anchor"}]
+        groups = [
+            {
+                "id": "partner",
+                "name": "Partner",
+                "type": "partner_program",
+                "obscurity": 2,
+                "airlines": ["AL1"],
+                "anchor": "AN",
+            }
+        ]
+        gen = QuestionGenerator(Dataset(nodes=nodes, edges=edges, airlines=airlines, groups=groups))
+        with self.assertRaises(ValueError):
+            gen.question_for("partner", "AAA", "BBB")
+
 
 if __name__ == "__main__":
     unittest.main()
