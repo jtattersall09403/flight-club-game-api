@@ -62,7 +62,7 @@ def load_static_dataset(data_dir: Path | None = None) -> Dataset:
         nodes=_load_json(d / "nodes.json"),
         edges=_load_json(d / "edges.json"),
         airlines=_load_json(d / "airlines.json"),
-        groups=_load_json(d / "groups.json"),
+        groups=_sanitize_groups(_load_json(d / "groups.json")),
     )
 
 
@@ -112,9 +112,32 @@ def _normalize_iata(value: Any) -> str | None:
     return code or None
 
 
+def _sanitize_groups(groups: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    sanitized: list[dict[str, Any]] = []
+    for group in groups:
+        if not isinstance(group, dict):
+            continue
+        item = dict(group)
+        anchor = _normalize_iata(group.get("anchor"))
+        seen: set[str] = set()
+        airlines: list[str] = []
+        for code in group.get("airlines", []):
+            norm = _normalize_iata(code)
+            if not norm or norm in seen:
+                continue
+            seen.add(norm)
+            airlines.append(norm)
+        if item.get("type") == "partner_program" and anchor:
+            airlines = [code for code in airlines if code != anchor]
+        item["anchor"] = anchor
+        item["airlines"] = airlines
+        sanitized.append(item)
+    return sanitized
+
+
 def build_dataset_from_airline_routes(raw: dict[str, Any], data_dir: Path | None = None) -> Dataset:
     d = data_dir or DEFAULT_DATA_DIR
-    groups = _load_json(d / "groups.json")
+    groups = _sanitize_groups(_load_json(d / "groups.json"))
     static_airlines = _load_json(d / "airlines.json")
     static_airline_names = {a.get("iata"): a.get("name") for a in static_airlines if isinstance(a, dict)}
 
