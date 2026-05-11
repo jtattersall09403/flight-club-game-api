@@ -128,6 +128,27 @@ class QuestionSamplingTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             gen.question_for("partner", "AAA", "BBB")
 
+    def test_partner_mixed_anchor_legs_are_excluded(self):
+        nodes = [
+            {"iata": "AAA", "tier": 2, "name": "A", "city": "A", "country": "X"},
+            {"iata": "BBB", "tier": 2, "name": "B", "city": "B", "country": "X"},
+        ]
+        edges = [{"a": "AAA", "b": "BBB", "airlines": ["AL1", "AN"]}]
+        airlines = [{"iata": "AL1", "name": "Partner"}, {"iata": "AN", "name": "Anchor"}]
+        groups = [
+            {
+                "id": "partner",
+                "name": "Partner",
+                "type": "partner_program",
+                "obscurity": 2,
+                "airlines": ["AL1"],
+                "anchor": "AN",
+            }
+        ]
+        gen = QuestionGenerator(Dataset(nodes=nodes, edges=edges, airlines=airlines, groups=groups))
+        with self.assertRaises(ValueError):
+            gen.question_for("partner", "AAA", "BBB")
+
 
 if __name__ == "__main__":
     unittest.main()
