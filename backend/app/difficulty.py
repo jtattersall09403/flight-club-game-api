@@ -13,17 +13,17 @@ computed from global degree thresholds in the data pipeline:
   T9: 10..19
   T10: <10
 
-Allowed combinations per level:
-  L1:  (O1, C1)
-  L2:  (O1, C2)
-  L3:  (O1, C3)
-  L4:  (O1, C4) or (O2, C2)
-  L5:  (O1, C5) or (O2, C3)
-  L6:  (O1, C6) or (O2, C4)
-  L7:  (O2, C7) or (O3, C5)
-  L8:  (O2, C8) or (O3, C6)
-  L9:  (O2, C9) or (O3, C7)
-  L10: (O2-3, C10)
+Allowed (conn_tier, obscurity) combinations per level:
+  L1:  (1,1)
+  L2:  (1,2), (2,1)
+  L3:  (1,3), (2,2), (3,1)
+  L4:  (2,3), (3,2), (4,1)
+  L5:  (3,3), (4,2), (5,1)
+  L6:  (4,3), (5,2), (6,1)
+  L7:  (5,3), (6,2), (7,1)
+  L8:  (6,3), (7,2), (8,1)
+  L9:  (7,3), (8,2), (9,1)
+  L10: (8,3), (9,2), (9,3), (10,1), (10,2), (10,3)
 """
 from __future__ import annotations
 
@@ -44,15 +44,15 @@ def feasible_combos(level: int) -> list[tuple[int, int]]:
 
     combos_by_level: dict[int, list[tuple[int, int]]] = {
         1: [(1, 1)],
-        2: [(1, 2)],
-        3: [(1, 3)],
-        4: [(1, 4), (2, 2), (2, 2)],
-        5: [(1, 5), (2, 3), (2, 3)],
-        6: [(1, 6), (2, 4), (2, 4)],
-        7: [(2, 7), (2, 7), (3, 5), (3, 5)],
-        8: [(2, 8), (2, 8), (3, 6), (3, 6)],
-        9: [(2, 9), (2, 9), (3, 7), (3, 7)],
-        10: [(2, 10), (3, 10), (3, 10), (3, 10), (3, 10)],
+        2: [(2, 1), (1, 2)],
+        3: [(3, 1), (2, 2), (1, 3)],
+        4: [(3, 2), (2, 3), (1, 4)],
+        5: [(3, 3), (2, 4), (1, 5)],
+        6: [(3, 4), (2, 5), (1, 6)],
+        7: [(3, 5), (2, 6), (1, 7)],
+        8: [(3, 6), (2, 7), (1, 8)],
+        9: [(3, 7), (2, 8), (1, 9)],
+        10: [(3, 8), (2, 9), (3, 9), (1, 10), (2, 10), (3, 10)],
     }
     return combos_by_level[level]
 
@@ -61,16 +61,4 @@ def combo_branches(level: int) -> list[list[tuple[int, int]]]:
     """Branch options per level; one branch should be sampled first each request."""
     if level < LEVEL_MIN or level > LEVEL_MAX:
         return []
-    branches = {
-        1: [[(1, 1)]],
-        2: [[(1, 2)]],
-        3: [[(1, 3)]],
-        4: [[(1, 4)], [(2, 2), (2, 2)]],
-        5: [[(1, 5)], [(2, 3), (2, 3)]],
-        6: [[(1, 6)], [(2, 4), (2, 4)]],
-        7: [[(2, 7), (2, 7)], [(3, 5), (3, 5)]],
-        8: [[(2, 8), (2, 8)], [(3, 6), (3, 6)]],
-        9: [[(2, 9), (2, 9)], [(3, 7), (3, 7)]],
-        10: [[(2, 10), (3, 10), (3, 10), (3, 10), (3, 10)]],
-    }
-    return branches[level]
+    return [[combo] for combo in feasible_combos(level)]
