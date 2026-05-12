@@ -25,3 +25,5 @@ python -m app.cli example --level 1        # one random level-1 question
 python -m app.cli example --level 7 -n 5   # five random level-7 questions
 python -m app.cli example --level 10 --seed 42
 ```
+
+<!-- Redeploy trigger: 2026-05-12 -->
