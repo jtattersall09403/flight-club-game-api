@@ -87,21 +87,14 @@
   },
   {
     "id": "ba_partners",
-    "name": "British Airways non-alliance partners",
+    "name": "BA non-oneworld avios partners",
     "type": "partner_program",
     "anchor": "BA",
     "status": "active",
     "obscurity": 3,
     "airlines": [
-      "6E",
       "CZ",
-      "DT",
       "EI",
-      "KQ",
-      "LM",
-      "MU",
-      "PG",
-      "S7",
       "VY"
     ]
   },
