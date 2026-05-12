@@ -9,11 +9,11 @@ class DifficultyRulesTests(unittest.TestCase):
             1: {(1, 1)},
             2: {(1, 2)},
             3: {(1, 3)},
-            4: {(1, 4), (1, 2)},
-            5: {(1, 5), (1, 3)},
+            4: {(1, 4), (2, 2)},
+            5: {(1, 5), (2, 3)},
             6: {(1, 6), (2, 4)},
-            7: {(1, 7), (2, 5)},
-            8: {(1, 8), (3, 6)},
+            7: {(2, 7), (2, 5)},
+            8: {(2, 8), (3, 6)},
             9: {(2, 9), (3, 7)},
             10: {(2, 10), (3, 10)},
         }
@@ -22,7 +22,7 @@ class DifficultyRulesTests(unittest.TestCase):
             self.assertEqual(set(feasible_combos(level)), expected_pairs)
 
     def test_combo_branches_match_expected_structure(self):
-        self.assertEqual(combo_branches(5), [[(1, 5)], [(1, 3), (1, 3)]])
+        self.assertEqual(combo_branches(5), [[(1, 5)], [(2, 3), (2, 3)]])
         self.assertEqual(combo_branches(10), [[(2, 10), (3, 10), (3, 10), (3, 10), (3, 10)]])
 
 
