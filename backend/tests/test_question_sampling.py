@@ -128,7 +128,7 @@ class QuestionSamplingTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             gen.question_for("partner", "AAA", "BBB")
 
-    def test_partner_mixed_anchor_legs_are_excluded(self):
+    def test_partner_mixed_anchor_legs_keep_non_anchor_airlines(self):
         nodes = [
             {"iata": "AAA", "tier": 2, "name": "A", "city": "A", "country": "X"},
             {"iata": "BBB", "tier": 2, "name": "B", "city": "B", "country": "X"},
@@ -146,8 +146,8 @@ class QuestionSamplingTests(unittest.TestCase):
             }
         ]
         gen = QuestionGenerator(Dataset(nodes=nodes, edges=edges, airlines=airlines, groups=groups))
-        with self.assertRaises(ValueError):
-            gen.question_for("partner", "AAA", "BBB")
+        q = gen.question_for("partner", "AAA", "BBB")
+        self.assertEqual(q.min_stops, 1)
 
 
 if __name__ == "__main__":

@@ -29,13 +29,13 @@ def build_subgraph(
     """
     member_codes = group_airline_set(group)
     anchor = group.get("anchor")
-    exclude_anchor_legs = group.get("type") == "partner_program" and isinstance(anchor, str) and bool(anchor)
+    is_partner_program = group.get("type") == "partner_program" and isinstance(anchor, str) and bool(anchor)
     adj: dict[str, set[str]] = {}
     edge_airlines: dict[tuple[str, str], list[str]] = {}
     for e in edges:
-        if exclude_anchor_legs and anchor in e["airlines"]:
-            continue
         in_group = [c for c in e["airlines"] if c in member_codes]
+        if is_partner_program:
+            in_group = [c for c in in_group if c != anchor]
         if not in_group:
             continue
         a, b = e["a"], e["b"]
