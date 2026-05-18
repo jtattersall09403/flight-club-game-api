@@ -284,48 +284,72 @@ class QuestionGenerator:
 
     def sample_alt(
         self,
-        conn_tier: int,
-        n_stops: int,
-        obscurity: int,
+        conn_tier: int | tuple[int, int],
+        n_stops: int | tuple[int, int],
+        obscurity: int | tuple[int, int],
         mode: Mode = "normal",
         rng: random.Random | None = None,
     ) -> Question:
         if mode not in VALID_MODES:
             raise ValueError(f"mode must be one of {VALID_MODES}; got {mode!r}")
-        if conn_tier < 1 or conn_tier > 10:
-            raise ValueError("conn_tier must be in [1, 10]")
-        if obscurity < 1 or obscurity > 3:
-            raise ValueError("obscurity must be in [1, 3]")
-        if n_stops < 0:
-            raise ValueError("n_stops must be >= 0")
         rng = rng or random
 
-        target_hops = n_stops + 1
-        eligible_groups = [
-            g["id"] for g in self.dataset.groups if int(g.get("obscurity", 99)) <= obscurity
-        ]
-        if not eligible_groups:
-            raise RuntimeError("no airline groups available for requested obscurity")
+        conn_tier_lo, conn_tier_hi = self._to_range(conn_tier)
+        n_stops_lo, n_stops_hi = self._to_range(n_stops)
+        obscurity_lo, obscurity_hi = self._to_range(obscurity)
+        if conn_tier_lo < 1 or conn_tier_hi > 10:
+            raise ValueError("conn_tier must be in [1, 10]")
+        if obscurity_lo < 1 or obscurity_hi > 3:
+            raise ValueError("obscurity must be in [1, 3]")
+        if n_stops_lo < 0:
+            raise ValueError("n_stops must be >= 0")
 
-        for gid in _shuffled(eligible_groups, rng):
-            adj, _edge_airlines = self._subgraph(gid)
-            tier_adj = self._tier_filtered_adj(adj, conn_tier)
-            tier_nodes = [
-                code
-                for code in self._nodes_by_tier.get(conn_tier, [])
-                if code in tier_adj
+        combos = [
+            (o, t, s)
+            for o in range(obscurity_lo, obscurity_hi + 1)
+            for t in range(conn_tier_lo, conn_tier_hi + 1)
+            for s in range(n_stops_lo, n_stops_hi + 1)
+        ]
+
+        for obscurity_val, conn_tier_val, n_stops_val in _shuffled(combos, rng):
+            target_hops = n_stops_val + 1
+            eligible_groups = [
+                g["id"]
+                for g in self.dataset.groups
+                if obscurity_lo <= int(g.get("obscurity", 99)) <= obscurity_val
             ]
-            if len(tier_nodes) < 2:
+            if not eligible_groups:
                 continue
-            pair = self._pair_with_exact_hops(tier_adj, tier_nodes, target_hops, rng)
-            if pair is None:
-                continue
-            a_iata, b_iata = pair
-            return self._materialize_alt(gid, a_iata, b_iata, conn_tier, target_hops, mode)
+
+            for gid in _shuffled(eligible_groups, rng):
+                adj, _edge_airlines = self._subgraph(gid)
+                tier_adj = self._tier_filtered_adj(adj, conn_tier_val)
+                tier_nodes = [
+                    code
+                    for code in self._nodes_by_tier.get(conn_tier_val, [])
+                    if code in tier_adj
+                ]
+                if len(tier_nodes) < 2:
+                    continue
+                pair = self._pair_with_exact_hops(tier_adj, tier_nodes, target_hops, rng)
+                if pair is None:
+                    continue
+                a_iata, b_iata = pair
+                return self._materialize_alt(
+                    gid, a_iata, b_iata, conn_tier_val, target_hops, mode
+                )
 
         raise RuntimeError(
             "could not find a matching airport pair for any eligible airline group"
         )
+
+    def _to_range(self, value: int | tuple[int, int]) -> tuple[int, int]:
+        if isinstance(value, int):
+            return value, value
+        lo, hi = value
+        if lo > hi:
+            raise ValueError("range start must be <= range end")
+        return lo, hi
 
     def _pair_with_exact_hops(
         self,

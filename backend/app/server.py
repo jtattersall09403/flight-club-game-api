@@ -67,11 +67,33 @@ class QuestionRequest(BaseModel):
 
 
 class QuestionAltRequest(BaseModel):
-    conn_tier: int = Field(ge=1, le=10)
-    n_stops: int = Field(ge=0)
-    obscurity: int = Field(ge=1, le=3)
+    conn_tier: int | tuple[int, int]
+    n_stops: int | tuple[int, int]
+    obscurity: int | tuple[int, int]
     mode: Mode = "normal"
     seed: int | None = None
+
+    @staticmethod
+    def _normalize_range(name: str, value: int | tuple[int, int], lo: int, hi: int) -> tuple[int, int]:
+        if isinstance(value, int):
+            out = (value, value)
+        else:
+            out = value
+        start, end = out
+        if start > end:
+            raise ValueError(f"{name} range start must be <= end")
+        if start < lo or end > hi:
+            raise ValueError(f"{name} must be in [{lo}, {hi}]")
+        return start, end
+
+    def conn_tier_range(self) -> tuple[int, int]:
+        return self._normalize_range("conn_tier", self.conn_tier, 1, 10)
+
+    def n_stops_range(self) -> tuple[int, int]:
+        return self._normalize_range("n_stops", self.n_stops, 0, 25)
+
+    def obscurity_range(self) -> tuple[int, int]:
+        return self._normalize_range("obscurity", self.obscurity, 1, 3)
 
 
 class LegSpec(BaseModel):
@@ -170,9 +192,9 @@ def questions_alt(req: QuestionAltRequest) -> dict[str, Any]:
     rng = random.Random(req.seed) if req.seed is not None else random
     try:
         q = gen.sample_alt(
-            conn_tier=req.conn_tier,
-            n_stops=req.n_stops,
-            obscurity=req.obscurity,
+            conn_tier=req.conn_tier_range(),
+            n_stops=req.n_stops_range(),
+            obscurity=req.obscurity_range(),
             mode=req.mode,
             rng=rng,
         )
