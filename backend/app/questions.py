@@ -361,11 +361,19 @@ class QuestionGenerator:
     def map_data_for_question(self, question: Question) -> dict[str, Any]:
         gid = question.group_id
         group = self._groups_by_id[gid]
-        adj, _ = self._subgraph(gid)
+        adj, edge_airlines = self._subgraph(gid)
         airports = set(adj.keys())
         airports.add(question.a)
         airports.add(question.b)
         group_airlines = sorted(graph.group_airline_set(group))
+
+        served_by_airport: dict[str, set[str]] = {code: set() for code in airports}
+        for (a, b), airlines in edge_airlines.items():
+            if a in served_by_airport:
+                served_by_airport[a].update(airlines)
+            if b in served_by_airport:
+                served_by_airport[b].update(airlines)
+
         out_airports: list[dict[str, Any]] = []
         for code in sorted(airports):
             meta = self._airport_meta.get(code, {})
@@ -378,7 +386,7 @@ class QuestionGenerator:
                     "country": meta.get("country"),
                     "lat": meta.get("lat"),
                     "lng": meta.get("lon"),
-                    "servedByAirlines": group_airlines,
+                    "servedByAirlines": sorted(served_by_airport.get(code, set())),
                 }
             )
         return {

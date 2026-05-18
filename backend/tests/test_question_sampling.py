@@ -183,6 +183,11 @@ class RouteBuilderValidationTests(unittest.TestCase):
         self.assertEqual(payload["endAirport"], "MAD")
         self.assertEqual([a["iata"] for a in payload["airlines"]], ["AA", "BA", "IB"])
         self.assertEqual({a["iata"] for a in payload["airports"]}, {"JFK", "LHR", "MAD", "SFO"})
+        served_by = {a["iata"]: a["servedByAirlines"] for a in payload["airports"]}
+        self.assertEqual(served_by["JFK"], ["AA", "BA"])
+        self.assertEqual(served_by["LHR"], ["AA", "BA", "IB"])
+        self.assertEqual(served_by["MAD"], ["BA", "IB"])
+        self.assertEqual(served_by["SFO"], ["IB"])
 
     def test_invalid_stopover_rejected(self):
         gen = QuestionGenerator(self._dataset())
