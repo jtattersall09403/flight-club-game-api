@@ -303,13 +303,19 @@ class QuestionGenerator:
 
         first_src = legs[0].src.upper()
         last_dst = legs[-1].dst.upper()
-        endpoints = {first_src, last_dst}
-        if endpoints != {question.a, question.b}:
+        if first_src != question.a or last_dst != question.b:
             return ValidationResult(
                 False,
-                f"routing must start at {question.a} or {question.b} and end at "
-                f"the other; got {first_src} -> ... -> {last_dst}",
+                f"routing must start at {question.a} and end at {question.b}; "
+                f"got {first_src} -> ... -> {last_dst}",
             )
+
+        for stopover in [l.dst.upper() for l in legs[:-1]]:
+            if stopover not in _adj:
+                return ValidationResult(
+                    False,
+                    f"invalid stopover airport for {question.group_name}: {stopover}",
+                )
 
         for i, leg in enumerate(legs):
             src = leg.src.upper()
@@ -351,6 +357,62 @@ class QuestionGenerator:
                 )
 
         return ValidationResult(True, None, stops=len(legs) - 1)
+
+    def map_data_for_question(self, question: Question) -> dict[str, Any]:
+        gid = question.group_id
+        group = self._groups_by_id[gid]
+        adj, edge_airlines = self._subgraph(gid)
+        airports = set(adj.keys())
+        airports.add(question.a)
+        airports.add(question.b)
+        group_airlines = sorted(graph.group_airline_set(group))
+
+        served_by_airport: dict[str, set[str]] = {code: set() for code in airports}
+        for (a, b), airlines in edge_airlines.items():
+            if a in served_by_airport:
+                served_by_airport[a].update(airlines)
+            if b in served_by_airport:
+                served_by_airport[b].update(airlines)
+
+        out_airports: list[dict[str, Any]] = []
+        for code in sorted(airports):
+            meta = self._airport_meta.get(code, {})
+            out_airports.append(
+                {
+                    "iata": code,
+                    "icao": meta.get("icao"),
+                    "name": meta.get("name"),
+                    "city": meta.get("city"),
+                    "country": meta.get("country"),
+                    "lat": meta.get("lat"),
+                    "lng": meta.get("lon"),
+                    "servedByAirlines": sorted(served_by_airport.get(code, set())),
+                }
+            )
+        return {
+            "group_id": gid,
+            "group_name": group["name"],
+            "startAirport": question.a,
+            "endAirport": question.b,
+            "airlines": [
+                {"iata": c, "name": self._airline_name.get(c, c)} for c in group_airlines
+            ],
+            "airports": out_airports,
+        }
+
+    def valid_airlines_for_leg(
+        self,
+        group_id: str,
+        src: str,
+        dst: str,
+    ) -> list[dict[str, str]]:
+        src, dst = src.upper(), dst.upper()
+        if group_id not in self._groups_by_id:
+            raise ValueError(f"unknown group: {group_id}")
+        _adj, edge_airlines = self._subgraph(group_id)
+        key = (src, dst) if src < dst else (dst, src)
+        codes = edge_airlines.get(key, [])
+        return [{"iata": c, "name": self._airline_name.get(c, c)} for c in codes]
 
     def example_answer(
         self,

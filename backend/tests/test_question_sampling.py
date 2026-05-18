@@ -3,7 +3,7 @@ import unittest
 from unittest.mock import patch
 
 from app.data import Dataset
-from app.questions import QuestionGenerator
+from app.questions import Leg, QuestionGenerator
 
 
 class QuestionSamplingTests(unittest.TestCase):
@@ -148,6 +148,79 @@ class QuestionSamplingTests(unittest.TestCase):
         gen = QuestionGenerator(Dataset(nodes=nodes, edges=edges, airlines=airlines, groups=groups))
         q = gen.question_for("partner", "AAA", "BBB")
         self.assertEqual(q.min_stops, 1)
+
+
+class RouteBuilderValidationTests(unittest.TestCase):
+    def _dataset(self) -> Dataset:
+        nodes = [
+            {"iata": "JFK", "icao": "KJFK", "tier": 2, "name": "John F. Kennedy", "city": "New York", "country": "US", "lat": 40.6, "lon": -73.7},
+            {"iata": "LHR", "icao": "EGLL", "tier": 2, "name": "Heathrow", "city": "London", "country": "UK", "lat": 51.47, "lon": -0.45},
+            {"iata": "MAD", "icao": "LEMD", "tier": 2, "name": "Madrid", "city": "Madrid", "country": "ES", "lat": 40.47, "lon": -3.56},
+            {"iata": "SFO", "icao": "KSFO", "tier": 2, "name": "San Francisco", "city": "San Francisco", "country": "US", "lat": 37.61, "lon": -122.38},
+        ]
+        edges = [
+            {"a": "JFK", "b": "LHR", "airlines": ["BA", "AA"]},
+            {"a": "LHR", "b": "MAD", "airlines": ["IB", "BA"]},
+            {"a": "MAD", "b": "SFO", "airlines": ["IB"]},
+            {"a": "JFK", "b": "SFO", "airlines": ["UA"]},
+        ]
+        airlines = [
+            {"iata": "AA", "name": "American"},
+            {"iata": "BA", "name": "British Airways"},
+            {"iata": "IB", "name": "Iberia"},
+            {"iata": "UA", "name": "United"},
+        ]
+        groups = [
+            {"id": "oneworld", "name": "Oneworld", "obscurity": 1, "airlines": ["AA", "BA", "IB"], "anchor": None}
+        ]
+        return Dataset(nodes=nodes, edges=edges, airlines=airlines, groups=groups)
+
+    def test_map_data_filters_group_and_includes_start_end(self):
+        gen = QuestionGenerator(self._dataset())
+        q = gen.question_for("oneworld", "JFK", "MAD")
+        payload = gen.map_data_for_question(q)
+        self.assertEqual(payload["startAirport"], "JFK")
+        self.assertEqual(payload["endAirport"], "MAD")
+        self.assertEqual([a["iata"] for a in payload["airlines"]], ["AA", "BA", "IB"])
+        self.assertEqual({a["iata"] for a in payload["airports"]}, {"JFK", "LHR", "MAD", "SFO"})
+        served_by = {a["iata"]: a["servedByAirlines"] for a in payload["airports"]}
+        self.assertEqual(served_by["JFK"], ["AA", "BA"])
+        self.assertEqual(served_by["LHR"], ["AA", "BA", "IB"])
+        self.assertEqual(served_by["MAD"], ["BA", "IB"])
+        self.assertEqual(served_by["SFO"], ["IB"])
+
+    def test_invalid_stopover_rejected(self):
+        gen = QuestionGenerator(self._dataset())
+        q = gen.question_for("oneworld", "JFK", "MAD")
+        result = gen.validate_answer(q, [
+            Leg("JFK", "LHR", "BA"),
+            # force an invalid intermediate airport not in group subgraph
+            Leg("LHR", "XXX", "BA"),
+            Leg("XXX", "MAD", "IB"),
+        ])
+        self.assertFalse(result.valid)
+
+    def test_invalid_airline_rejected(self):
+        gen = QuestionGenerator(self._dataset())
+        q = gen.question_for("oneworld", "JFK", "MAD")
+        result = gen.validate_answer(q, [
+            Leg("JFK", "LHR", "UA"),
+            Leg("LHR", "MAD", "IB"),
+        ])
+        self.assertFalse(result.valid)
+
+    def test_invalid_leg_airline_rejected_and_leg_filtering(self):
+        gen = QuestionGenerator(self._dataset())
+        q = gen.question_for("oneworld", "JFK", "MAD")
+        result = gen.validate_answer(q, [
+            Leg("JFK", "LHR", "IB"),
+            Leg("LHR", "MAD", "IB"),
+        ])
+        self.assertFalse(result.valid)
+        self.assertEqual(
+            [a["iata"] for a in gen.valid_airlines_for_leg("oneworld", "JFK", "LHR")],
+            ["AA", "BA"],
+        )
 
 
 if __name__ == "__main__":

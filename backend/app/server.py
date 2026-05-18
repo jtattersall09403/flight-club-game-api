@@ -94,6 +94,19 @@ class HintRequest(BaseModel):
     group_id: str
 
 
+class MapDataRequest(BaseModel):
+    group_id: str
+    a: str
+    b: str
+    mode: Mode = "normal"
+
+
+class LegAirlinesRequest(BaseModel):
+    group_id: str
+    src: str
+    dst: str
+
+
 # -------------------------------------------------------------------- helpers
 
 def _score(level: int, min_stops: int, actual_stops: int, hint_used: bool) -> int:
@@ -219,6 +232,29 @@ def routes(req: RoutesRequest) -> dict[str, Any]:
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
     return {"routes": gen.k_shortest_routes(q, k=req.k)}
+
+
+@app.post("/api/map-data")
+def map_data(req: MapDataRequest) -> dict[str, Any]:
+    try:
+        q = gen.question_for(req.group_id, req.a, req.b, mode=req.mode)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+    return gen.map_data_for_question(q)
+
+
+@app.post("/api/leg-airlines")
+def leg_airlines(req: LegAirlinesRequest) -> dict[str, Any]:
+    try:
+        airlines = gen.valid_airlines_for_leg(req.group_id, req.src, req.dst)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+    return {
+        "group_id": req.group_id,
+        "src": req.src.upper(),
+        "dst": req.dst.upper(),
+        "airlines": airlines,
+    }
 
 
 @app.post("/api/hint")
