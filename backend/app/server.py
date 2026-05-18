@@ -66,6 +66,14 @@ class QuestionRequest(BaseModel):
     seed: int | None = None
 
 
+class QuestionAltRequest(BaseModel):
+    conn_tier: int = Field(ge=1, le=10)
+    n_stops: int = Field(ge=0)
+    obscurity: int = Field(ge=1, le=3)
+    mode: Mode = "normal"
+    seed: int | None = None
+
+
 class LegSpec(BaseModel):
     src: str
     dst: str
@@ -152,6 +160,25 @@ def question(req: QuestionRequest) -> dict[str, Any]:
         raise HTTPException(status_code=500, detail=str(e)) from e
     out = q.to_dict()
     # Add coords for the map.
+    out["a_lat"], out["a_lon"] = _coords(q.a)
+    out["b_lat"], out["b_lon"] = _coords(q.b)
+    return out
+
+
+@app.post("/api/questions-alt")
+def questions_alt(req: QuestionAltRequest) -> dict[str, Any]:
+    rng = random.Random(req.seed) if req.seed is not None else random
+    try:
+        q = gen.sample_alt(
+            conn_tier=req.conn_tier,
+            n_stops=req.n_stops,
+            obscurity=req.obscurity,
+            mode=req.mode,
+            rng=rng,
+        )
+    except (ValueError, RuntimeError) as e:
+        raise HTTPException(status_code=500, detail=str(e)) from e
+    out = q.to_dict()
     out["a_lat"], out["a_lon"] = _coords(q.a)
     out["b_lat"], out["b_lon"] = _coords(q.b)
     return out

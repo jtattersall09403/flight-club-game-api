@@ -282,6 +282,77 @@ class QuestionGenerator:
     def _are_connected(self, adj: dict[str, set[str]], a: str, b: str) -> bool:
         return graph.bfs_distance(adj, a, b) is not None
 
+    def sample_alt(
+        self,
+        conn_tier: int,
+        n_stops: int,
+        obscurity: int,
+        mode: Mode = "normal",
+        rng: random.Random | None = None,
+    ) -> Question:
+        if mode not in VALID_MODES:
+            raise ValueError(f"mode must be one of {VALID_MODES}; got {mode!r}")
+        if conn_tier < 1 or conn_tier > 10:
+            raise ValueError("conn_tier must be in [1, 10]")
+        if obscurity < 1 or obscurity > 3:
+            raise ValueError("obscurity must be in [1, 3]")
+        if n_stops < 0:
+            raise ValueError("n_stops must be >= 0")
+        rng = rng or random
+
+        target_hops = n_stops + 1
+        eligible_groups = [
+            g["id"] for g in self.dataset.groups if int(g.get("obscurity", 99)) <= obscurity
+        ]
+        if not eligible_groups:
+            raise RuntimeError("no airline groups available for requested obscurity")
+
+        for gid in _shuffled(eligible_groups, rng):
+            adj, _edge_airlines = self._subgraph(gid)
+            tier_adj = self._tier_filtered_adj(adj, conn_tier)
+            tier_nodes = [
+                code
+                for code in self._nodes_by_tier.get(conn_tier, [])
+                if code in tier_adj
+            ]
+            if len(tier_nodes) < 2:
+                continue
+            pair = self._pair_with_exact_hops(tier_adj, tier_nodes, target_hops, rng)
+            if pair is None:
+                continue
+            a_iata, b_iata = pair
+            return self._materialize_alt(gid, a_iata, b_iata, conn_tier, target_hops, mode)
+
+        raise RuntimeError(
+            "could not find a matching airport pair for any eligible airline group"
+        )
+
+    def _pair_with_exact_hops(
+        self,
+        adj: dict[str, set[str]],
+        candidates: list[str],
+        hops: int,
+        rng: random.Random,
+    ) -> tuple[str, str] | None:
+        candidate_set = set(candidates)
+        for src in _shuffled(candidates, rng):
+            dist = graph.single_source_distances(adj, src, max_depth=hops)
+            matches = [dst for dst, d in dist.items() if d == hops and dst in candidate_set and dst != src]
+            if matches:
+                return src, rng.choice(matches)
+        return None
+
+    def _tier_filtered_adj(self, adj: dict[str, set[str]], conn_tier: int) -> dict[str, set[str]]:
+        tier_nodes = set(self._nodes_by_tier.get(conn_tier, []))
+        out: dict[str, set[str]] = {}
+        for node in tier_nodes:
+            if node not in adj:
+                continue
+            nbrs = {nbr for nbr in adj[node] if nbr in tier_nodes}
+            if nbrs:
+                out[node] = nbrs
+        return out
+
     # -------------------------------------------------------- answer handling
 
     def validate_answer(
@@ -561,6 +632,40 @@ class QuestionGenerator:
             conn_tier=conn_tier,
             min_stops=min_stops,
             direct_available=graph.has_direct(adj, a, b),
+            mode=mode,
+        )
+
+    def _materialize_alt(
+        self,
+        gid: str,
+        a: str,
+        b: str,
+        conn_tier: int,
+        hops: int,
+        mode: Mode,
+    ) -> Question:
+        if a > b:
+            a, b = b, a
+        group = self._groups_by_id[gid]
+        a_meta = self._airport_meta.get(a, {})
+        b_meta = self._airport_meta.get(b, {})
+        obscurity = int(group["obscurity"])
+        return Question(
+            group_id=gid,
+            group_name=group["name"],
+            obscurity=obscurity,
+            a=a,
+            b=b,
+            a_name=a_meta.get("name"),
+            b_name=b_meta.get("name"),
+            a_city=a_meta.get("city"),
+            b_city=b_meta.get("city"),
+            a_country=a_meta.get("country"),
+            b_country=b_meta.get("country"),
+            level=difficulty_level(obscurity, conn_tier),
+            conn_tier=conn_tier,
+            min_stops=max(1, hops - 1),
+            direct_available=(hops == 1),
             mode=mode,
         )
 
