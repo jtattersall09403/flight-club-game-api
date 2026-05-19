@@ -304,16 +304,13 @@ class QuestionGenerator:
         if n_stops_lo < 0:
             raise ValueError("n_stops must be >= 0")
 
-        combos = [
-            (o, s)
-            for o in range(obscurity_lo, obscurity_hi + 1)
-            for s in range(n_stops_lo, n_stops_hi + 1)
-        ]
+        combos = [o for o in range(obscurity_lo, obscurity_hi + 1)]
         tier_values = list(range(conn_tier_lo, conn_tier_hi + 1))
+        min_hops = n_stops_lo + 1
+        max_hops = n_stops_hi + 1
 
         candidate_questions: list[tuple[str, str, str, int, int]] = []
-        for obscurity_val, n_stops_val in _shuffled(combos, rng):
-            target_hops = n_stops_val + 1
+        for obscurity_val in _shuffled(combos, rng):
             eligible_groups = [
                 g["id"]
                 for g in self.dataset.groups
@@ -333,7 +330,13 @@ class QuestionGenerator:
                 ]
                 if len(tier_nodes) < 2:
                     continue
-                pair = self._pair_with_exact_hops(tier_adj, tier_nodes, target_hops, rng)
+                pair, hops = self._pair_with_hop_range(
+                    tier_adj,
+                    tier_nodes,
+                    min_hops=min_hops,
+                    max_hops=max_hops,
+                    rng=rng,
+                )
                 if pair is None:
                     continue
                 a_iata, b_iata = pair
@@ -342,7 +345,7 @@ class QuestionGenerator:
                     int(self._airport_meta.get(b_iata, {}).get("tier", conn_tier_hi)),
                 )
                 candidate_questions.append(
-                    (gid, a_iata, b_iata, conn_tier_for_question, target_hops)
+                    (gid, a_iata, b_iata, conn_tier_for_question, hops)
                 )
                 if len(candidate_questions) >= 64:
                     break
@@ -365,24 +368,30 @@ class QuestionGenerator:
             raise ValueError("range start must be <= range end")
         return lo, hi
 
-    def _pair_with_exact_hops(
+    def _pair_with_hop_range(
         self,
         adj: dict[str, set[str]],
         candidates: list[str],
-        hops: int,
+        min_hops: int,
+        max_hops: int,
         rng: random.Random,
-    ) -> tuple[str, str] | None:
+    ) -> tuple[tuple[str, str] | None, int]:
         candidate_set = set(candidates)
-        pairs: set[tuple[str, str]] = set()
+        pairs_by_hops: dict[int, set[tuple[str, str]]] = {}
         for src in candidates:
-            dist = graph.single_source_distances(adj, src, max_depth=hops)
-            matches = [dst for dst, d in dist.items() if d == hops and dst in candidate_set and dst != src]
-            for dst in matches:
+            dist = graph.single_source_distances(adj, src, max_depth=max_hops)
+            matches = [
+                (dst, d)
+                for dst, d in dist.items()
+                if min_hops <= d <= max_hops and dst in candidate_set and dst != src
+            ]
+            for dst, d in matches:
                 pair = (src, dst) if src < dst else (dst, src)
-                pairs.add(pair)
-        if pairs:
-            return rng.choice(list(pairs))
-        return None
+                pairs_by_hops.setdefault(d, set()).add(pair)
+        if not pairs_by_hops:
+            return None, 0
+        hop_bucket = rng.choice(sorted(pairs_by_hops.keys()))
+        return rng.choice(list(pairs_by_hops[hop_bucket])), hop_bucket
 
     def _tier_filtered_adj(
         self,
