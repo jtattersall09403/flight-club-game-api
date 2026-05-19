@@ -311,6 +311,7 @@ class QuestionGenerator:
             for s in range(n_stops_lo, n_stops_hi + 1)
         ]
 
+        candidate_questions: list[tuple[str, str, str, int, int]] = []
         for obscurity_val, conn_tier_val, n_stops_val in _shuffled(combos, rng):
             target_hops = n_stops_val + 1
             eligible_groups = [
@@ -335,9 +336,15 @@ class QuestionGenerator:
                 if pair is None:
                     continue
                 a_iata, b_iata = pair
-                return self._materialize_alt(
-                    gid, a_iata, b_iata, conn_tier_val, target_hops, mode
-                )
+                candidate_questions.append((gid, a_iata, b_iata, conn_tier_val, target_hops))
+                if len(candidate_questions) >= 64:
+                    break
+            if len(candidate_questions) >= 64:
+                break
+
+        if candidate_questions:
+            gid, a_iata, b_iata, conn_tier_val, target_hops = rng.choice(candidate_questions)
+            return self._materialize_alt(gid, a_iata, b_iata, conn_tier_val, target_hops, mode)
 
         raise RuntimeError(
             "could not find a matching airport pair for any eligible airline group"
@@ -359,11 +366,15 @@ class QuestionGenerator:
         rng: random.Random,
     ) -> tuple[str, str] | None:
         candidate_set = set(candidates)
-        for src in _shuffled(candidates, rng):
+        pairs: set[tuple[str, str]] = set()
+        for src in candidates:
             dist = graph.single_source_distances(adj, src, max_depth=hops)
             matches = [dst for dst, d in dist.items() if d == hops and dst in candidate_set and dst != src]
-            if matches:
-                return src, rng.choice(matches)
+            for dst in matches:
+                pair = (src, dst) if src < dst else (dst, src)
+                pairs.add(pair)
+        if pairs:
+            return rng.choice(list(pairs))
         return None
 
     def _tier_filtered_adj(self, adj: dict[str, set[str]], conn_tier: int) -> dict[str, set[str]]:
