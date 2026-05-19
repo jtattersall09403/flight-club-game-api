@@ -282,6 +282,118 @@ class QuestionGenerator:
     def _are_connected(self, adj: dict[str, set[str]], a: str, b: str) -> bool:
         return graph.bfs_distance(adj, a, b) is not None
 
+    def sample_alt(
+        self,
+        conn_tier: int | tuple[int, int],
+        n_stops: int | tuple[int, int],
+        obscurity: int | tuple[int, int],
+        mode: Mode = "normal",
+        rng: random.Random | None = None,
+    ) -> Question:
+        if mode not in VALID_MODES:
+            raise ValueError(f"mode must be one of {VALID_MODES}; got {mode!r}")
+        rng = rng or random
+
+        conn_tier_lo, conn_tier_hi = self._to_range(conn_tier)
+        n_stops_lo, n_stops_hi = self._to_range(n_stops)
+        obscurity_lo, obscurity_hi = self._to_range(obscurity)
+        if conn_tier_lo < 1 or conn_tier_hi > 10:
+            raise ValueError("conn_tier must be in [1, 10]")
+        if obscurity_lo < 1 or obscurity_hi > 3:
+            raise ValueError("obscurity must be in [1, 3]")
+        if n_stops_lo < 0:
+            raise ValueError("n_stops must be >= 0")
+
+        combos = [o for o in range(obscurity_lo, obscurity_hi + 1)]
+        tier_values = list(range(conn_tier_lo, conn_tier_hi + 1))
+        endpoint_nodes = [
+            code
+            for tier in tier_values
+            for code in self._nodes_by_tier.get(tier, [])
+        ]
+        min_hops = n_stops_lo + 1
+        max_hops = n_stops_hi + 1
+
+        candidate_questions: list[tuple[str, str, str, int, int]] = []
+        for obscurity_val in _shuffled(combos, rng):
+            eligible_groups = [
+                g["id"]
+                for g in self.dataset.groups
+                if obscurity_lo <= int(g.get("obscurity", 99)) <= obscurity_val
+            ]
+            if not eligible_groups:
+                continue
+
+            for gid in _shuffled(eligible_groups, rng):
+                adj, _edge_airlines = self._subgraph(gid)
+                tier_nodes = [
+                    code for code in endpoint_nodes if code in adj
+                ]
+                if len(tier_nodes) < 2:
+                    continue
+                pair, hops = self._pair_with_hop_range(
+                    adj,
+                    tier_nodes,
+                    min_hops=min_hops,
+                    max_hops=max_hops,
+                    rng=rng,
+                )
+                if pair is None:
+                    continue
+                a_iata, b_iata = pair
+                conn_tier_for_question = max(
+                    int(self._airport_meta.get(a_iata, {}).get("tier", conn_tier_hi)),
+                    int(self._airport_meta.get(b_iata, {}).get("tier", conn_tier_hi)),
+                )
+                candidate_questions.append(
+                    (gid, a_iata, b_iata, conn_tier_for_question, hops)
+                )
+                if len(candidate_questions) >= 64:
+                    break
+            if len(candidate_questions) >= 64:
+                break
+
+        if candidate_questions:
+            gid, a_iata, b_iata, conn_tier_val, target_hops = rng.choice(candidate_questions)
+            return self._materialize_alt(gid, a_iata, b_iata, conn_tier_val, target_hops, mode)
+
+        raise RuntimeError(
+            "could not find a matching airport pair for any eligible airline group"
+        )
+
+    def _to_range(self, value: int | tuple[int, int]) -> tuple[int, int]:
+        if isinstance(value, int):
+            return value, value
+        lo, hi = value
+        if lo > hi:
+            raise ValueError("range start must be <= range end")
+        return lo, hi
+
+    def _pair_with_hop_range(
+        self,
+        adj: dict[str, set[str]],
+        candidates: list[str],
+        min_hops: int,
+        max_hops: int,
+        rng: random.Random,
+    ) -> tuple[tuple[str, str] | None, int]:
+        candidate_set = set(candidates)
+        pairs_by_hops: dict[int, set[tuple[str, str]]] = {}
+        for src in candidates:
+            dist = graph.single_source_distances(adj, src, max_depth=max_hops)
+            matches = [
+                (dst, d)
+                for dst, d in dist.items()
+                if min_hops <= d <= max_hops and dst in candidate_set and dst != src
+            ]
+            for dst, d in matches:
+                pair = (src, dst) if src < dst else (dst, src)
+                pairs_by_hops.setdefault(d, set()).add(pair)
+        if not pairs_by_hops:
+            return None, 0
+        hop_bucket = rng.choice(sorted(pairs_by_hops.keys()))
+        return rng.choice(list(pairs_by_hops[hop_bucket])), hop_bucket
+
     # -------------------------------------------------------- answer handling
 
     def validate_answer(
@@ -561,6 +673,40 @@ class QuestionGenerator:
             conn_tier=conn_tier,
             min_stops=min_stops,
             direct_available=graph.has_direct(adj, a, b),
+            mode=mode,
+        )
+
+    def _materialize_alt(
+        self,
+        gid: str,
+        a: str,
+        b: str,
+        conn_tier: int,
+        hops: int,
+        mode: Mode,
+    ) -> Question:
+        if a > b:
+            a, b = b, a
+        group = self._groups_by_id[gid]
+        a_meta = self._airport_meta.get(a, {})
+        b_meta = self._airport_meta.get(b, {})
+        obscurity = int(group["obscurity"])
+        return Question(
+            group_id=gid,
+            group_name=group["name"],
+            obscurity=obscurity,
+            a=a,
+            b=b,
+            a_name=a_meta.get("name"),
+            b_name=b_meta.get("name"),
+            a_city=a_meta.get("city"),
+            b_city=b_meta.get("city"),
+            a_country=a_meta.get("country"),
+            b_country=b_meta.get("country"),
+            level=difficulty_level(obscurity, conn_tier),
+            conn_tier=conn_tier,
+            min_stops=max(1, hops - 1),
+            direct_available=(hops == 1),
             mode=mode,
         )
 

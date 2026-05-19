@@ -102,6 +102,29 @@ def bfs_distance(adj: dict[str, set[str]], src: str, dst: str) -> int | None:
     return None
 
 
+def single_source_distances(
+    adj: dict[str, set[str]],
+    src: str,
+    max_depth: int | None = None,
+) -> dict[str, int]:
+    """Shortest-path hop distances from src to every reachable node."""
+    if src not in adj:
+        return {}
+    seen: dict[str, int] = {src: 0}
+    q = deque([src])
+    while q:
+        x = q.popleft()
+        d = seen[x]
+        if max_depth is not None and d >= max_depth:
+            continue
+        for y in adj[x]:
+            if y in seen:
+                continue
+            seen[y] = d + 1
+            q.append(y)
+    return seen
+
+
 def shortest_path(adj: dict[str, set[str]], src: str, dst: str) -> list[str] | None:
     """Return the list of nodes on a shortest src->dst path, or None."""
     if src == dst:
