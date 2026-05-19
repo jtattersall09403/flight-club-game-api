@@ -305,14 +305,14 @@ class QuestionGenerator:
             raise ValueError("n_stops must be >= 0")
 
         combos = [
-            (o, t, s)
+            (o, s)
             for o in range(obscurity_lo, obscurity_hi + 1)
-            for t in range(conn_tier_lo, conn_tier_hi + 1)
             for s in range(n_stops_lo, n_stops_hi + 1)
         ]
+        tier_values = list(range(conn_tier_lo, conn_tier_hi + 1))
 
         candidate_questions: list[tuple[str, str, str, int, int]] = []
-        for obscurity_val, conn_tier_val, n_stops_val in _shuffled(combos, rng):
+        for obscurity_val, n_stops_val in _shuffled(combos, rng):
             target_hops = n_stops_val + 1
             eligible_groups = [
                 g["id"]
@@ -324,10 +324,11 @@ class QuestionGenerator:
 
             for gid in _shuffled(eligible_groups, rng):
                 adj, _edge_airlines = self._subgraph(gid)
-                tier_adj = self._tier_filtered_adj(adj, conn_tier_val)
+                tier_adj = self._tier_filtered_adj(adj, tier_values)
                 tier_nodes = [
                     code
-                    for code in self._nodes_by_tier.get(conn_tier_val, [])
+                    for tier in tier_values
+                    for code in self._nodes_by_tier.get(tier, [])
                     if code in tier_adj
                 ]
                 if len(tier_nodes) < 2:
@@ -336,7 +337,13 @@ class QuestionGenerator:
                 if pair is None:
                     continue
                 a_iata, b_iata = pair
-                candidate_questions.append((gid, a_iata, b_iata, conn_tier_val, target_hops))
+                conn_tier_for_question = max(
+                    int(self._airport_meta.get(a_iata, {}).get("tier", conn_tier_hi)),
+                    int(self._airport_meta.get(b_iata, {}).get("tier", conn_tier_hi)),
+                )
+                candidate_questions.append(
+                    (gid, a_iata, b_iata, conn_tier_for_question, target_hops)
+                )
                 if len(candidate_questions) >= 64:
                     break
             if len(candidate_questions) >= 64:
@@ -377,8 +384,16 @@ class QuestionGenerator:
             return rng.choice(list(pairs))
         return None
 
-    def _tier_filtered_adj(self, adj: dict[str, set[str]], conn_tier: int) -> dict[str, set[str]]:
-        tier_nodes = set(self._nodes_by_tier.get(conn_tier, []))
+    def _tier_filtered_adj(
+        self,
+        adj: dict[str, set[str]],
+        conn_tiers: list[int],
+    ) -> dict[str, set[str]]:
+        tier_nodes = {
+            code
+            for tier in conn_tiers
+            for code in self._nodes_by_tier.get(tier, [])
+        }
         out: dict[str, set[str]] = {}
         for node in tier_nodes:
             if node not in adj:
