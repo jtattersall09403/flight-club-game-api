@@ -66,6 +66,20 @@ class QuestionRequest(BaseModel):
     seed: int | None = None
 
 
+LEVEL_ALT_PRESETS: dict[int, list[tuple[tuple[int, int], tuple[int, int], tuple[int, int]]]] = {
+    1: [((1, 1), (1, 1), (1, 1))],
+    2: [((1, 1), (2, 2), (1, 1)), ((2, 3), (1, 1), (1, 1))],
+    3: [((2, 3), (2, 2), (1, 1)), ((3, 4), (1, 1), (1, 1)), ((1, 3), (1, 1), (2, 2))],
+    4: [((3, 4), (2, 2), (1, 1)), ((3, 3), (2, 2), (1, 2))],
+    5: [((4, 5), (2, 2), (1, 2))],
+    6: [((5, 7), (3, 3), (1, 2))],
+    7: [((7, 8), (3, 3), (1, 2)), ((6, 7), (3, 3), (2, 3))],
+    8: [((8, 10), (3, 4), (1, 2))],
+    9: [((8, 10), (4, 4), (1, 2))],
+    10: [((8, 10), (5, 5), (2, 3))],
+}
+
+
 class QuestionAltRequest(BaseModel):
     conn_tier: int | tuple[int, int]
     n_stops: int | tuple[int, int]
@@ -195,6 +209,26 @@ def questions_alt(req: QuestionAltRequest) -> dict[str, Any]:
             conn_tier=req.conn_tier_range(),
             n_stops=req.n_stops_range(),
             obscurity=req.obscurity_range(),
+            mode=req.mode,
+            rng=rng,
+        )
+    except (ValueError, RuntimeError) as e:
+        raise HTTPException(status_code=500, detail=str(e)) from e
+    out = q.to_dict()
+    out["a_lat"], out["a_lon"] = _coords(q.a)
+    out["b_lat"], out["b_lon"] = _coords(q.b)
+    return out
+
+
+@app.post("/api/question-next")
+def question_next(req: QuestionRequest) -> dict[str, Any]:
+    rng = random.Random(req.seed) if req.seed is not None else random
+    conn_tier, n_stops, obscurity = rng.choice(LEVEL_ALT_PRESETS[req.level])
+    try:
+        q = gen.sample_alt(
+            conn_tier=conn_tier,
+            n_stops=n_stops,
+            obscurity=obscurity,
             mode=req.mode,
             rng=rng,
         )
