@@ -306,6 +306,11 @@ class QuestionGenerator:
 
         combos = [o for o in range(obscurity_lo, obscurity_hi + 1)]
         tier_values = list(range(conn_tier_lo, conn_tier_hi + 1))
+        endpoint_nodes = [
+            code
+            for tier in tier_values
+            for code in self._nodes_by_tier.get(tier, [])
+        ]
         min_hops = n_stops_lo + 1
         max_hops = n_stops_hi + 1
 
@@ -321,17 +326,13 @@ class QuestionGenerator:
 
             for gid in _shuffled(eligible_groups, rng):
                 adj, _edge_airlines = self._subgraph(gid)
-                tier_adj = self._tier_filtered_adj(adj, tier_values)
                 tier_nodes = [
-                    code
-                    for tier in tier_values
-                    for code in self._nodes_by_tier.get(tier, [])
-                    if code in tier_adj
+                    code for code in endpoint_nodes if code in adj
                 ]
                 if len(tier_nodes) < 2:
                     continue
                 pair, hops = self._pair_with_hop_range(
-                    tier_adj,
+                    adj,
                     tier_nodes,
                     min_hops=min_hops,
                     max_hops=max_hops,
@@ -392,25 +393,6 @@ class QuestionGenerator:
             return None, 0
         hop_bucket = rng.choice(sorted(pairs_by_hops.keys()))
         return rng.choice(list(pairs_by_hops[hop_bucket])), hop_bucket
-
-    def _tier_filtered_adj(
-        self,
-        adj: dict[str, set[str]],
-        conn_tiers: list[int],
-    ) -> dict[str, set[str]]:
-        tier_nodes = {
-            code
-            for tier in conn_tiers
-            for code in self._nodes_by_tier.get(tier, [])
-        }
-        out: dict[str, set[str]] = {}
-        for node in tier_nodes:
-            if node not in adj:
-                continue
-            nbrs = {nbr for nbr in adj[node] if nbr in tier_nodes}
-            if nbrs:
-                out[node] = nbrs
-        return out
 
     # -------------------------------------------------------- answer handling
 
