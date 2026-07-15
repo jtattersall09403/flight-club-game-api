@@ -289,6 +289,7 @@ class QuestionGenerator:
         obscurity: int | tuple[int, int],
         mode: Mode = "normal",
         rng: random.Random | None = None,
+        level: int | None = None,
     ) -> Question:
         if mode not in VALID_MODES:
             raise ValueError(f"mode must be one of {VALID_MODES}; got {mode!r}")
@@ -303,6 +304,8 @@ class QuestionGenerator:
             raise ValueError("obscurity must be in [1, 3]")
         if n_stops_lo < 0:
             raise ValueError("n_stops must be >= 0")
+        if level is not None and (level < LEVEL_MIN or level > LEVEL_MAX):
+            raise ValueError(f"level must be in [{LEVEL_MIN}, {LEVEL_MAX}]")
 
         tier_values = list(range(conn_tier_lo, conn_tier_hi + 1))
         endpoint_nodes = [
@@ -347,7 +350,15 @@ class QuestionGenerator:
 
         if chosen_question is not None:
             gid, a_iata, b_iata, conn_tier_val, target_hops = chosen_question
-            return self._materialize_alt(gid, a_iata, b_iata, conn_tier_val, target_hops, mode)
+            return self._materialize_alt(
+                gid,
+                a_iata,
+                b_iata,
+                conn_tier_val,
+                target_hops,
+                mode,
+                level=level,
+            )
 
         raise RuntimeError(
             "could not find a matching airport pair for any eligible airline group"
@@ -672,6 +683,7 @@ class QuestionGenerator:
         conn_tier: int,
         hops: int,
         mode: Mode,
+        level: int | None = None,
     ) -> Question:
         if a > b:
             a, b = b, a
@@ -691,7 +703,7 @@ class QuestionGenerator:
             b_city=b_meta.get("city"),
             a_country=a_meta.get("country"),
             b_country=b_meta.get("country"),
-            level=difficulty_level(obscurity, conn_tier),
+            level=level if level is not None else difficulty_level(obscurity, conn_tier),
             conn_tier=conn_tier,
             min_stops=max(1, hops - 1),
             direct_available=(hops == 1),

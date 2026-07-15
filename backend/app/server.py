@@ -231,6 +231,7 @@ def question_next(req: QuestionRequest) -> dict[str, Any]:
             obscurity=obscurity,
             mode=req.mode,
             rng=rng,
+            level=req.level,
         )
     except (ValueError, RuntimeError) as e:
         raise HTTPException(status_code=500, detail=str(e)) from e
