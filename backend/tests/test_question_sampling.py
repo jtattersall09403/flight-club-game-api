@@ -107,6 +107,48 @@ class QuestionSamplingTests(unittest.TestCase):
         self.assertEqual(gen._airport_meta[q.b]["tier"], 1)
         self.assertEqual(q.conn_tier, 1)
 
+    def test_sample_alt_scans_all_matching_groups_without_first_64_cap(self):
+        nodes = [
+            {"iata": "AAA", "tier": 2, "name": "A", "city": "A", "country": "X"},
+            {"iata": "BBB", "tier": 2, "name": "B", "city": "B", "country": "X"},
+        ]
+        edges = [{"a": "AAA", "b": "BBB", "airlines": ["AL1"]}]
+        airlines = [{"iata": "AL1", "name": "Airline 1"}]
+        groups = [
+            {"id": f"g{i:02d}", "name": f"G{i:02d}", "obscurity": 1, "airlines": ["AL1"], "anchor": None}
+            for i in range(70)
+        ]
+        gen = QuestionGenerator(Dataset(nodes=nodes, edges=edges, airlines=airlines, groups=groups))
+
+        visited_groups = []
+        original_subgraph = gen._subgraph
+
+        def capture_subgraph(gid):
+            visited_groups.append(gid)
+            return original_subgraph(gid)
+
+        gen._subgraph = capture_subgraph  # type: ignore[assignment]
+
+        gen.sample_alt(conn_tier=2, n_stops=0, obscurity=1, rng=random.Random(1))
+
+        self.assertEqual(set(visited_groups), {g["id"] for g in groups})
+
+    def test_sample_alt_obscurity_range_does_not_include_easier_groups(self):
+        nodes = [
+            {"iata": "AAA", "tier": 2, "name": "A", "city": "A", "country": "X"},
+            {"iata": "BBB", "tier": 2, "name": "B", "city": "B", "country": "X"},
+        ]
+        edges = [{"a": "AAA", "b": "BBB", "airlines": ["AL1"]}]
+        airlines = [{"iata": "AL1", "name": "Airline 1"}]
+        groups = [
+            {"id": "easy", "name": "Easy", "obscurity": 1, "airlines": ["AL1"], "anchor": None},
+            {"id": "target_but_no_routes", "name": "Target", "obscurity": 2, "airlines": ["AL2"], "anchor": None},
+        ]
+        gen = QuestionGenerator(Dataset(nodes=nodes, edges=edges, airlines=airlines, groups=groups))
+
+        with self.assertRaises(RuntimeError):
+            gen.sample_alt(conn_tier=2, n_stops=0, obscurity=2, rng=random.Random(1))
+
     def test_partner_anchor_flights_not_used_for_question_generation(self):
         nodes = [
             {"iata": "AAA", "tier": 2, "name": "A", "city": "A", "country": "X"},
